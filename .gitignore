@@ -1,5 +1,0 @@
-.env
-go.work
-go.work.sum
-*.so
-.gitignore
