@@ -21,11 +21,9 @@ func CreateUserHandler(w http.ResponseWriter, r *http.Request) {
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
 		log.Printf("Error decoding request body: %v\n", err)
-		http.Error(w, "Invalid request payload", http.StatusBadRequest)
+		http.Error(w, utils.ErrMsgInvalidPayload, http.StatusBadRequest)
 		return
 	}
-
-	log.Printf("Data yang diterima: Username: %s, RoleID: %d\n", req.Username, req.RoleID)
 
 	userResponse, err := models.CreateUser(&req)
 	if err != nil {
@@ -38,7 +36,7 @@ func CreateUserHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("User berhasil dibuat: %s\n", userResponse.Username)
 
 	// Kirim Response Sukses
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set(utils.ContentHeader, utils.Mime)
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(userResponse)
 }
@@ -59,7 +57,7 @@ func GetUserHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "User tidak ditemukan", http.StatusNotFound)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set(utils.ContentHeader, utils.Mime)
 	json.NewEncoder(w).Encode(user)
 }
 
@@ -92,7 +90,7 @@ func GetAllUsersHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set(utils.ContentHeader, utils.Mime)
 	json.NewEncoder(w).Encode(resp)
 }
 
