@@ -6,8 +6,8 @@ import (
 	"errors"
 	"time"
 
-	"go-sis-be/configs"
-	"go-sis-be/utils"
+	"go-sis-be/internal/configs"
+	"go-sis-be/internal/utils"
 )
 
 // --- BAGIAN AUTH (Login, Refresh, Logout) ---
@@ -62,7 +62,6 @@ func LogoutUser(uid string) error {
 }
 
 // --- BAGIAN CRUD USER ---
-
 func CreateUser(req *CreateUserRequest) (*UserResponse, error) {
 	hashedPassword, err := utils.HashPassword(req.Password)
 	if err != nil {

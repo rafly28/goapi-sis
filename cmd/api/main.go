@@ -11,7 +11,7 @@ import (
 	"syscall"
 	"time"
 
-	"go-sis-be/configs"
+	"go-sis-be/internal/configs"
 	"go-sis-be/routes"
 )
 

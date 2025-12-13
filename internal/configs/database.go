@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/joho/godotenv"
+	_ "github.com/lib/pq"
 )
 
 var DB *sql.DB

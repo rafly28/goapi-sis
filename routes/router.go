@@ -1,7 +1,7 @@
 package routes
 
 import (
-	"go-sis-be/handlers"
+	"go-sis-be/internal/handlers"
 	"go-sis-be/middleware"
 
 	"github.com/gorilla/mux"
@@ -22,9 +22,13 @@ func InitRouter() *mux.Router {
 
 	apiProtected.HandleFunc("/users", handlers.CreateUserHandler).Methods("POST")
 	apiProtected.HandleFunc("/users", handlers.GetAllUsersHandler).Methods("GET")
-	apiProtected.HandleFunc("/users/{uid}", handlers.GetUserHandler).Methods("GET")
+	apiProtected.HandleFunc("/users/{uid}", handlers.HandleGetUserDetail).Methods("GET")
 	apiProtected.HandleFunc("/users/{uid}", handlers.DeleteUserHandler).Methods("DELETE")
 	apiProtected.HandleFunc("/logout", handlers.LogoutHandler).Methods("POST")
+	apiProtected.HandleFunc("/register/student", handlers.HandleStudentRegistration).Methods("POST")
+	apiProtected.HandleFunc("/register/teacher", handlers.HandleTeacherRegistration).Methods("POST")
+	apiProtected.HandleFunc("/register/admin", handlers.HandleAdminRegistration).Methods("POST")
+	apiProtected.HandleFunc("/register/parent", handlers.HandleParentRegistration).Methods("POST")
 
 	return r
 }

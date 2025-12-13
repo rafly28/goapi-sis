@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strings"
 
-	"go-sis-be/utils" // Sesuaikan nama module Anda
+	"go-sis-be/internal/utils" // Sesuaikan nama module Anda
 )
 
 type contextKey string

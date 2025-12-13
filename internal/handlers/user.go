@@ -3,9 +3,9 @@ package handlers
 import (
 	"database/sql"
 	"encoding/json"
+	"go-sis-be/internal/models"
+	"go-sis-be/internal/utils"
 	"go-sis-be/middleware"
-	"go-sis-be/models"
-	"go-sis-be/utils"
 	"log"
 	"net/http"
 	"strconv"
@@ -110,4 +110,56 @@ func DeleteUserHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("User berhasil dihapus"))
+}
+
+type Person struct {
+	UID           string `json:"uid"`
+	FullName      string `json:"full_name"`
+	BirthDate     string `json:"birth_date"`
+	NIK           string `json:"nik"`
+	Gender        string `json:"gender"`
+	Religion      string `json:"religion"`
+	MaritalStatus string `json:"marital_status"`
+	Address       string `json:"address"`
+	PhoneNumber   string `json:"phone_number"`
+	Email         string `json:"email"`
+}
+
+type RegisterBaseRequest struct {
+	Username      string `json:"username"`
+	Password      string `json:"password"`
+	RoleID        int    // Ditetapkan di Handler (1=Admin, 4=Wali Murid)
+	FullName      string `json:"full_name"`
+	BirthDate     string `json:"birth_date"`
+	NIK           string `json:"nik"`
+	Gender        string `json:"gender"`
+	Religion      string `json:"religion"`
+	MaritalStatus string `json:"marital_status"`
+	Address       string `json:"address"`
+	PhoneNumber   string `json:"phone_number"`
+	Email         string `json:"email"`
+}
+
+// RegisterTeacherRequest: Untuk Guru (Inherit BaseRequest + Teacher Details)
+type RegisterTeacherRequest struct {
+	RegisterBaseRequest
+	FunctionalPosition string `json:"functional_position"`
+	EmploymentStatus   string `json:"employment_status"`
+	LastEducation      string `json:"last_education"`
+	University         string `json:"university"`
+}
+
+// RegisterStudentRequest: Untuk Siswa (Inherit BaseRequest + Student Details)
+type RegisterStudentRequest struct {
+	RegisterBaseRequest
+	NISN            string  `json:"nisn"`
+	FamilyStatus    string  `json:"family_status"`
+	FatherJob       string  `json:"father_job"`
+	MotherJob       string  `json:"mother_job"`
+	ParentAddress   string  `json:"parent_address"`
+	ReceivedDate    string  `json:"received_date"`
+	GuardianName    *string `json:"guardian_name,omitempty"`
+	GuardianAddress *string `json:"guardian_address,omitempty"`
+	GuardianPhone   *string `json:"guardian_phone,omitempty"`
+	GuardianJob     *string `json:"guardian_job,omitempty"`
 }

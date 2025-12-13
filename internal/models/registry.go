@@ -5,8 +5,8 @@ import (
 	"database/sql"
 	"fmt"
 
-	"go-sis-be/configs"
-	"go-sis-be/utils"
+	"go-sis-be/internal/configs"
+	"go-sis-be/internal/utils"
 )
 
 // RegisterStudent melakukan insert ke 3 tabel (login_users, person, student_details) dalam satu transaksi
@@ -16,7 +16,6 @@ func RegisterStudent(req *RegisterStudentRequest) (*UserProfileResponse, error) 
 	if err != nil {
 		return nil, err
 	}
-	// Defer Rollback: Jika fungsi return sebelum Commit, otomatis rollback
 	defer tx.Rollback()
 
 	// ==========================================
@@ -28,7 +27,6 @@ func RegisterStudent(req *RegisterStudentRequest) (*UserProfileResponse, error) 
 	}
 
 	var uid string
-	// Pastikan kolom 'pass' sesuai database Anda (pass atau password_hash)
 	queryLogin := `
 		INSERT INTO login_users (username, pass, role_id) 
 		VALUES ($1, $2, $3) 
@@ -66,10 +64,8 @@ func RegisterStudent(req *RegisterStudentRequest) (*UserProfileResponse, error) 
 	if err != nil {
 		return nil, fmt.Errorf("gagal generate nis sequence: %w", err)
 	}
-	// Format NIS (misal: 0000000001)
 	generatedNIS := fmt.Sprintf("%010d", nisSeq)
 
-	// B. Insert Detail
 	queryStudent := `
 		INSERT INTO student_details (
 			uid, nis, nisn, family_status, child_order, 
@@ -120,12 +116,11 @@ func RegisterStudent(req *RegisterStudentRequest) (*UserProfileResponse, error) 
 	}, nil
 }
 func RegisterTeacher(req *RegisterTeacherRequest) (*UserProfileResponse, error) {
-	// 1. Mulai Transaksi
 	tx, err := configs.DB.Begin()
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback() // Rollback jika ada error sebelum Commit
+	defer tx.Rollback()
 
 	// ==========================================
 	// STEP 1: Insert ke login_users
@@ -169,11 +164,11 @@ func RegisterTeacher(req *RegisterTeacherRequest) (*UserProfileResponse, error) 
 	queryTeacher := `
 		INSERT INTO teacher_details (
 			uid, nip, nuptk, nrg, functional_position, employment_status, 
-			rank_class, years_of_service_y, years_of_service_m, 
+			rank_class, hire_date, 
 			sk_appointment_number, educator_cert_number, 
 			last_education, university, major, graduation_year, diploma_number
 		) VALUES (
-			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
+			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15
 		)`
 
 	// Handle Nullable Fields
@@ -182,15 +177,27 @@ func RegisterTeacher(req *RegisterTeacherRequest) (*UserProfileResponse, error) 
 	nNrg := sql.NullString{String: req.NRG, Valid: req.NRG != ""}
 	nRank := sql.NullString{String: req.RankClass, Valid: req.RankClass != ""}
 	nDiploma := sql.NullString{String: req.DiplomaNumber, Valid: req.DiplomaNumber != ""}
+	nSK := sql.NullString{String: req.SKAppointmentNumber, Valid: req.SKAppointmentNumber != ""}
+	nCert := sql.NullString{String: req.EducatorCertNumber, Valid: req.EducatorCertNumber != ""}
 
 	_, err = tx.Exec(queryTeacher,
 		uid, nNip, nNuptk, nNrg, req.FunctionalPosition, req.EmploymentStatus,
-		nRank, req.YearsOfServiceY, req.YearsOfServiceM,
+		nRank, req.HireDate,
+		nSK, nCert,
 		req.LastEducation, req.University, req.Major, req.GraduationYear, nDiploma,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("gagal insert teacher details: %w", err)
 	}
+
+	// _, err = tx.Exec(queryTeacher,
+	// 	uid, nNip, nNuptk, nNrg, req.FunctionalPosition, req.EmploymentStatus,
+	// 	nRank, req.YearsOfServiceY, req.YearsOfServiceM,
+	// 	req.LastEducation, req.University, req.Major, req.GraduationYear, nDiploma,
+	// )
+	// if err != nil {
+	// 	return nil, fmt.Errorf("gagal insert teacher details: %w", err)
+	// }
 
 	// ==========================================
 	// FINAL: Commit Transaksi
@@ -203,7 +210,81 @@ func RegisterTeacher(req *RegisterTeacherRequest) (*UserProfileResponse, error) 
 	return &UserProfileResponse{
 		UID:      uid,
 		Username: req.Username,
-		RoleName: "Guru", // Hardcode karena ini fungsi register Guru
+		RoleName: "Guru",
+		PersonData: Person{
+			UID:      uid,
+			FullName: req.FullName,
+			NIK:      req.NIK,
+		},
+	}, nil
+}
+func RegisterBaseUser(req *RegisterBaseRequest) (*UserProfileResponse, error) {
+	tx, err := configs.DB.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	// ==========================================
+	// STEP 1: Insert ke login_users
+	// ==========================================
+	hashedPassword, err := utils.HashPassword(req.Password)
+	if err != nil {
+		return nil, err
+	}
+
+	var uid string
+	queryLogin := `
+		INSERT INTO login_users (username, pass, role_id) 
+		VALUES ($1, $2, $3) 
+		RETURNING uid`
+
+	err = tx.QueryRow(queryLogin, req.Username, hashedPassword, req.RoleID).Scan(&uid)
+	if err != nil {
+		return nil, fmt.Errorf("gagal insert login untuk %s: %w", req.Username, err)
+	}
+
+	// ==========================================
+	// STEP 2: Insert ke person
+	// ==========================================
+	queryPerson := `
+		INSERT INTO person (
+			uid, full_name, birth_date, nik, gender, religion, 
+			marital_status, address, phone_number, email
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`
+
+	_, err = tx.Exec(queryPerson,
+		uid, req.FullName, req.BirthDate, req.NIK, req.Gender, req.Religion,
+		req.MaritalStatus, req.Address, req.PhoneNumber, req.Email,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("gagal insert person untuk NIK %s: %w", req.NIK, err)
+	}
+
+	// ==========================================
+	// FINAL: Commit Transaksi
+	// ==========================================
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+
+	// ------------------------------------------
+	// Return response sukses
+	// ------------------------------------------
+	roleName := ""
+	switch req.RoleID {
+	case 1:
+		roleName = "Admin"
+	case 4:
+		roleName = "Wali Murid"
+	default:
+		roleName = "Base User"
+	}
+
+	return &UserProfileResponse{
+		UID:      uid,
+		Username: req.Username,
+		RoleName: roleName,
 		PersonData: Person{
 			UID:      uid,
 			FullName: req.FullName,

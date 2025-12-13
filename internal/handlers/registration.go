@@ -6,32 +6,20 @@ import (
 	"net/http"
 
 	// Tambahkan strings untuk membuat array ENUM
-	"go-sis-be/models"
-	"go-sis-be/utils"
+	"go-sis-be/internal/models"
+	"go-sis-be/internal/utils"
 )
 
-// ==========================================
-// STRUCT REQUEST/RESPONSE OTENTIKASI
-// ==========================================
-
-type LoginRequest struct {
-	Username string `json:"username"`
-	Pass     string `json:"password"` // Sebenarnya pass (DB) tapi tag JSON-nya password (Client)
-}
-
-type TokenResponse struct {
-	AccessToken  string `json:"access_token"`
-	RefreshToken string `json:"refresh_token"`
-}
-
-type RefreshRequest struct {
-	RefreshToken string `json:"refresh_token"`
-}
+const (
+	ADMIN_ROLE_ID   = 1
+	TEACHER_ROLE_ID = 2
+	STUDENT_ROLE_ID = 3
+	PARENT_ROLE_ID  = 4
+)
 
 // ==========================================
 // HELPER ENUM VALIDATION
 // ==========================================
-
 // isEnumValid: Memvalidasi apakah nilai ada dalam daftar ENUM yang valid
 func isEnumValid(value string, validOptions []string) bool {
 	if value == "" {
@@ -53,118 +41,8 @@ func respondWithError(w http.ResponseWriter, code int, message string) {
 }
 
 // ==========================================
-// 1. LOGIN HANDLER
+// 4. REGISTRASI MURID HANDLER
 // ==========================================
-func LoginHandler(w http.ResponseWriter, r *http.Request) {
-	var req LoginRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request", http.StatusBadRequest)
-		return
-	}
-
-	// Cek User
-	// *Asumsi* models.GetUserForLogin mengambil pass hash dan role
-	user, role, err := models.GetUserForLogin(req.Username)
-	if err != nil {
-		http.Error(w, "Server error", http.StatusInternalServerError)
-		return
-	}
-	// Periksa apakah user ditemukan dan password match
-	if user == nil || !utils.CheckPasswordHash(req.Pass, user.Pass) {
-		http.Error(w, "Username atau password salah", http.StatusUnauthorized)
-		return
-	}
-
-	// Generate Tokens
-	accessToken, _ := utils.GenerateAccessToken(user.UID, user.Username, role)
-	refreshToken, _ := utils.GenerateRefreshToken(user.UID)
-
-	// Simpan Refresh Token ke DB (PENTING!)
-	if err := models.UpdateRefreshToken(user.UID, refreshToken); err != nil {
-		http.Error(w, "Gagal menyimpan session", http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set(utils.ContentHeader, utils.Mime)
-	json.NewEncoder(w).Encode(TokenResponse{
-		AccessToken:  accessToken,
-		RefreshToken: refreshToken,
-	})
-}
-
-// ==========================================
-// 2. REFRESH TOKEN HANDLER
-// ==========================================
-func RefreshTokenHandler(w http.ResponseWriter, r *http.Request) {
-	var req RefreshRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request", http.StatusBadRequest)
-		return
-	}
-
-	// Validasi Refresh Token (Signature check)
-	claims, err := utils.ValidateToken(req.RefreshToken)
-	if err != nil {
-		http.Error(w, "Token tidak valid atau expired", http.StatusUnauthorized)
-		return
-	}
-
-	// Validasi ke Database (Apakah token ini masih aktif/belum logout?)
-	storedToken, err := models.GetRefreshToken(claims.Subject) // Subject berisi UID
-	if err != nil || storedToken != req.RefreshToken {
-		http.Error(w, "Token sudah tidak berlaku (Logged out)", http.StatusUnauthorized)
-		return
-	}
-
-	// Ambil data user terbaru (untuk role jaga-jaga kalau berubah)
-	user, err := models.GetUserByID(claims.Subject)
-	if err != nil {
-		http.Error(w, "User tidak ditemukan", http.StatusUnauthorized)
-		return
-	}
-
-	// Generate Access Token BARU
-	newAccessToken, _ := utils.GenerateAccessToken(user.UID, user.Username, user.RoleName)
-
-	w.Header().Set(utils.ContentHeader, utils.Mime)
-	json.NewEncoder(w).Encode(map[string]string{
-		"access_token": newAccessToken,
-	})
-}
-
-// ==========================================
-// 3. LOGOUT HANDLER
-// ==========================================
-func LogoutHandler(w http.ResponseWriter, r *http.Request) {
-	// IDEALNYA: UID diambil dari Middleware Access Token
-	// Untuk sementara kita ambil dari body request logout
-	type LogoutRequest struct {
-		UID string `json:"uid"`
-	}
-	var req LogoutRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request payload", http.StatusBadRequest)
-		return
-	}
-
-	if req.UID == "" {
-		http.Error(w, "UID diperlukan", http.StatusBadRequest)
-		return
-	}
-
-	if err := models.LogoutUser(req.UID); err != nil {
-		http.Error(w, "Gagal logout", http.StatusInternalServerError)
-		return
-	}
-
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("Berhasil logout"))
-}
-
-// ==========================================
-// 4. REGISTRASI MURID HANDLER (BARU!)
-// ==========================================
-
 func HandleStudentRegistration(w http.ResponseWriter, r *http.Request) {
 	var req models.RegisterStudentRequest
 
@@ -178,8 +56,13 @@ func HandleStudentRegistration(w http.ResponseWriter, r *http.Request) {
 	req.RoleID = 3
 
 	// 2. Validasi Dasar (Wajib Diisi)
-	if req.Username == "" || req.Password == "" || req.NIK == "" || req.NISN == "" || req.FullName == "" {
-		respondWithError(w, http.StatusBadRequest, "Username, Password, Nama Lengkap, NIK, dan NISN wajib diisi.")
+	// if req.Username == "" || req.Password == "" || req.NIK == "" || req.NISN == "" || req.FullName == "" {
+	// 	respondWithError(w, http.StatusBadRequest, "Username, Password, Nama Lengkap, NIK, dan NISN wajib diisi.")
+	// 	return
+	// }
+
+	if req.Username == "" || req.Password == "" || req.NIK == "" || req.NISN == "" || req.FullName == "" || req.ReceivedDate == "" {
+		respondWithError(w, http.StatusBadRequest, "Username, Password, Nama Lengkap, NIK, NISN, dan Tanggal Pendaftaran wajib diisi.")
 		return
 	}
 
@@ -238,9 +121,8 @@ func HandleStudentRegistration(w http.ResponseWriter, r *http.Request) {
 }
 
 // ==========================================
-// 5. REGISTRASI GURU HANDLER (BARU!)
+// 5. REGISTRASI GURU HANDLER
 // ==========================================
-
 func HandleTeacherRegistration(w http.ResponseWriter, r *http.Request) {
 	var req models.RegisterTeacherRequest
 
@@ -293,6 +175,94 @@ func HandleTeacherRegistration(w http.ResponseWriter, r *http.Request) {
 		fmt.Printf("Error registering teacher: %v\n", err)
 		// Pesan error umum untuk transaksi yang gagal
 		respondWithError(w, http.StatusInternalServerError, "Gagal mendaftarkan Guru. Data duplikat (NIK) atau error server.")
+		return
+	}
+
+	// 5. Kirim Respons Sukses
+	w.Header().Set(utils.ContentHeader, utils.Mime)
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(resp)
+}
+
+// ==========================================
+// 6. REGISTRASI ADMIN
+// ==========================================
+func HandleAdminRegistration(w http.ResponseWriter, r *http.Request) {
+	var req models.RegisterBaseRequest
+
+	// 1. Decode Request Body
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondWithError(w, http.StatusBadRequest, utils.ErrMsgInvalidPayload)
+		return
+	}
+
+	// Set RoleID secara eksplisit untuk Admin
+	req.RoleID = ADMIN_ROLE_ID
+
+	// 2. Validasi Dasar (Wajib Diisi)
+	if req.Username == "" || req.Password == "" || req.NIK == "" || req.FullName == "" {
+		respondWithError(w, http.StatusBadRequest, "Username, Password, Nama Lengkap, dan NIK wajib diisi.")
+		return
+	}
+
+	// 3. Validasi ENUMs (Sama seperti user base lainnya)
+	if !isEnumValid(req.Gender, []string{models.GenderMale, models.GenderFemale}) ||
+		!isEnumValid(req.Religion, []string{models.ReligionIslam, models.ReligionKristen, models.ReligionKatolik, models.ReligionHindu, models.ReligionBuddha, models.ReligionKonghucu}) ||
+		!isEnumValid(req.MaritalStatus, []string{models.MaritalMarried, models.MaritalSingle, models.MaritalSingleParent}) {
+		respondWithError(w, http.StatusBadRequest, "Data Person (Gender/Agama/Status Nikah) tidak valid.")
+		return
+	}
+
+	// 4. Panggil Fungsi Database Transaksi (RegisterBaseUser)
+	resp, err := models.RegisterBaseUser(&req)
+
+	if err != nil {
+		fmt.Printf("Error registering Admin: %v\n", err)
+		respondWithError(w, http.StatusInternalServerError, "Gagal mendaftarkan Admin. Data duplikat (NIK) atau error server.")
+		return
+	}
+
+	// 5. Kirim Respons Sukses
+	w.Header().Set(utils.ContentHeader, utils.Mime)
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(resp)
+}
+
+// ==========================================
+// 7. REGISTRASI ORANG TUA
+// ==========================================
+func HandleParentRegistration(w http.ResponseWriter, r *http.Request) {
+	var req models.RegisterBaseRequest
+
+	// 1. Decode Request Body
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondWithError(w, http.StatusBadRequest, utils.ErrMsgInvalidPayload)
+		return
+	}
+
+	// Set RoleID secara eksplisit untuk Wali Murid
+	req.RoleID = PARENT_ROLE_ID
+
+	// 2. Validasi Dasar (Wajib Diisi)
+	if req.Username == "" || req.Password == "" || req.NIK == "" || req.FullName == "" {
+		respondWithError(w, http.StatusBadRequest, "Username, Password, Nama Lengkap, dan NIK wajib diisi.")
+		return
+	}
+
+	// 3. Validasi ENUMs
+	if !isEnumValid(req.Gender, []string{models.GenderMale, models.GenderFemale}) ||
+		!isEnumValid(req.Religion, []string{models.ReligionIslam, models.ReligionKristen, models.ReligionKatolik, models.ReligionHindu, models.ReligionBuddha, models.ReligionKonghucu}) ||
+		!isEnumValid(req.MaritalStatus, []string{models.MaritalMarried, models.MaritalSingle, models.MaritalSingleParent}) {
+		respondWithError(w, http.StatusBadRequest, "Data Person (Gender/Agama/Status Nikah) tidak valid.")
+		return
+	}
+
+	// 4. Panggil Fungsi Database Transaksi (RegisterBaseUser)
+	resp, err := models.RegisterBaseUser(&req)
+
+	if err != nil {
+		fmt.Printf("Error registering Parent: %v\n", err)
+		respondWithError(w, http.StatusInternalServerError, "Gagal mendaftarkan Wali Murid. Data duplikat (NIK) atau error server.")
 		return
 	}
 
