@@ -86,11 +86,11 @@ type CreateUserRequest struct {
 }
 
 type UserResponse struct {
-	UID       string    `json:"uid"`
-	Username  string    `json:"username"`
-	RoleName  string    `json:"role_name"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	UID      string `json:"uid"`
+	Username string `json:"username"`
+	RoleID   int    `json:"role_id"`
+	RoleName string `json:"role_name"`
+	FullName string `json:"full_name"`
 }
 
 type LoginCredentials struct {
@@ -197,6 +197,7 @@ type StudentProfileResponse struct {
 	UID           string `json:"uid"`
 	Username      string `json:"username"`
 	FullName      string `json:"full_name"`
+	RoleName      string `json:"role_name"`
 	BirthDate     string `json:"birth_date"`
 	NIK           string `json:"nik"`
 	Gender        string `json:"gender"`
@@ -215,6 +216,7 @@ type TeacherProfileResponse struct {
 	UID                 string `json:"uid"`
 	Username            string `json:"username"`
 	FullName            string `json:"full_name"`
+	RoleName            string `json:"role_name"`
 	BirthDate           string `json:"birth_date"`
 	NIK                 string `json:"nik"`
 	Gender              string `json:"gender"`

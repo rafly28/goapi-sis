@@ -20,6 +20,7 @@ type InternalUnifiedProfile struct {
 	RoleID        int
 	Username      string
 	FullName      string
+	RoleName      string
 	BirthDate     string
 	NIK           string
 	Gender        string
@@ -59,7 +60,7 @@ func GetProfileAndFormat(uid string) (interface{}, error) {
 	// 1. Definisikan Query LEFT JOIN Besar (Menggunakan LEFT JOIN LATERAL untuk function)
 	query := `
         SELECT
-            lu.role_id, lu.username, 
+            lu.role_id, lu.username, r.name,
             p.full_name, p.birth_date, p.nik, p.gender, p.religion, 
             p.marital_status, p.address, p.phone_number, p.email,
             
@@ -96,7 +97,7 @@ func GetProfileAndFormat(uid string) (interface{}, error) {
 	// 2. Eksekusi Query dan Scan Hasil
 	err := configs.DB.QueryRow(query, uid).Scan(
 		// Base fields (1-12)
-		&raw.RoleID, &raw.Username, // <<< Ditambahkan kembali RoleName
+		&raw.RoleID, &raw.Username, &raw.RoleName, // <<< Ditambahkan kembali RoleName
 		&raw.FullName, &raw.BirthDate, &raw.NIK, &raw.Gender, &raw.Religion,
 		&raw.MaritalStatus, &raw.Address, &nPhone, &nEmail,
 
@@ -128,7 +129,7 @@ func GetProfileAndFormat(uid string) (interface{}, error) {
 		// Mapping/Transformasi ke TeacherProfileResponse
 		return TeacherProfileResponse{
 			// Base Mapping
-			UID: raw.UID, Username: raw.Username,
+			UID: raw.UID, Username: raw.Username, RoleName: raw.RoleName,
 			FullName: raw.FullName, BirthDate: raw.BirthDate, NIK: raw.NIK, Gender: raw.Gender,
 			Religion: raw.Religion, MaritalStatus: raw.MaritalStatus, Address: raw.Address,
 			PhoneNumber: raw.PhoneNumber.String, Email: raw.Email.String,
@@ -160,7 +161,7 @@ func GetProfileAndFormat(uid string) (interface{}, error) {
 
 		return StudentProfileResponse{
 			// Base Mapping
-			UID: raw.UID, Username: raw.Username,
+			UID: raw.UID, Username: raw.Username, RoleName: raw.RoleName,
 			FullName: raw.FullName, BirthDate: raw.BirthDate, NIK: raw.NIK, Gender: raw.Gender,
 			Religion: raw.Religion, MaritalStatus: raw.MaritalStatus, Address: raw.Address,
 			PhoneNumber: raw.PhoneNumber.String, Email: raw.Email.String,

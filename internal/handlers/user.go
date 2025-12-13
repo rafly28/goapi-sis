@@ -3,11 +3,11 @@ package handlers
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"go-sis-be/internal/models"
 	"go-sis-be/internal/utils"
 	"log"
 	"net/http"
-	"strconv"
 
 	"github.com/gorilla/mux"
 )
@@ -40,57 +40,39 @@ func CreateUserHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(userResponse)
 }
 
-// func GetUserHandler(w http.ResponseWriter, r *http.Request) {
-// 	vars := mux.Vars(r)
-// 	uid := vars["uid"]
-
-// 	userInfo := r.Context().Value(middleware.UserInfoKey).(*utils.JWTClaims)
-// 	log.Printf("Request by: %s", userInfo.Username)
-
-// 	user, err := models.GetUserByID(uid)
-// 	if err != nil {
-// 		http.Error(w, "Gagal mengambil data user", http.StatusInternalServerError)
-// 		return
-// 	}
-// 	if user == nil {
-// 		http.Error(w, "User tidak ditemukan", http.StatusNotFound)
-// 		return
-// 	}
-// 	w.Header().Set(utils.ContentHeader, utils.Mime)
-// 	json.NewEncoder(w).Encode(user)
-// }
-
 func GetAllUsersHandler(w http.ResponseWriter, r *http.Request) {
-	query := r.URL.Query()
-	pageStr := query.Get("page")
-	limitStr := query.Get("limit")
+	q := r.URL.Query()
 
-	page := 1
-	limit := 10
+	// Default Pagination
+	page := utils.ParseIntQuery(q.Get("page"), 1)
+	limit := utils.ParseIntQuery(q.Get("limit"), 10)
 
-	if pageStr != "" {
-		if p, err := strconv.Atoi(pageStr); err == nil && p > 0 {
-			page = p
-		}
-	}
-	if limitStr != "" {
-		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
-			limit = l
-		}
-	}
+	// Filtering Parameters (Akan dikembangkan nanti, fokus ke base query dulu)
+	search := q.Get("search")
+	roleID := utils.ParseIntQuery(q.Get("role_id"), 0) // role_id=2 untuk Guru, role_id=3 untuk Murid
 
-	if limit > 100 {
-		limit = 100
-	}
+	// 2. Hit Model Logic
+	results, totalCount, err := models.GetAllUsers(page, limit, search, roleID)
 
-	resp, err := models.GetAllUsers(page, limit)
 	if err != nil {
-		http.Error(w, "Gagal mengambil data users", http.StatusInternalServerError)
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": fmt.Sprintf("Gagal mengambil daftar pengguna: %s", err.Error()),
+		})
 		return
 	}
 
+	// 3. Buat Struktur Response Pagination
+	response := map[string]interface{}{
+		"total_data": totalCount,
+		"page":       page,
+		"limit":      limit,
+		"data":       results,
+	}
+
 	w.Header().Set(utils.ContentHeader, utils.Mime)
-	json.NewEncoder(w).Encode(resp)
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(response)
 }
 
 func DeleteUserHandler(w http.ResponseWriter, r *http.Request) {

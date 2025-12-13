@@ -76,37 +76,54 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
 // 2. REFRESH TOKEN HANDLER
 // ==========================================
 func RefreshTokenHandler(w http.ResponseWriter, r *http.Request) {
-	var req RefreshRequest
+	var req RefreshRequest // Pastikan RefreshRequest sudah didefinisikan
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request", http.StatusBadRequest)
+		http.Error(w, "Invalid request payload", http.StatusBadRequest)
 		return
 	}
 
-	// Validasi Refresh Token (Signature check)
+	// 1. Validasi Refresh Token (Signature check & Expiration)
 	claims, err := utils.ValidateToken(req.RefreshToken)
 	if err != nil {
+		// Status 401: Unauthorized (token expired atau signature rusak)
 		http.Error(w, "Token tidak valid atau expired", http.StatusUnauthorized)
 		return
 	}
 
-	// Validasi ke Database (Apakah token ini masih aktif/belum logout?)
+	// 2. Validasi ke Database (Apakah token ini masih aktif/belum logout?)
+	// Asumsi GetRefreshToken mengembalikan string token
 	storedToken, err := models.GetRefreshToken(claims.Subject) // Subject berisi UID
+
+	// PERBAIKAN: Menggunakan kondisi OR yang lebih jelas
 	if err != nil || storedToken != req.RefreshToken {
 		http.Error(w, "Token sudah tidak berlaku (Logged out)", http.StatusUnauthorized)
 		return
 	}
 
-	// Ambil data user terbaru (untuk role jaga-jaga kalau berubah)
+	// 3. Ambil data user terbaru (untuk role/username jaga-jaga kalau berubah)
 	user, err := models.GetUserByID(claims.Subject)
+
 	if err != nil {
-		http.Error(w, "User tidak ditemukan", http.StatusUnauthorized)
+		if err.Error() == "user not found" {
+			http.Error(w, "User tidak ditemukan", http.StatusUnauthorized)
+			return
+		}
+		// Error DB lainnya
+		http.Error(w, "Gagal mengambil data user", http.StatusInternalServerError)
 		return
 	}
 
-	// Generate Access Token BARU
-	newAccessToken, _ := utils.GenerateAccessToken(user.UID, user.Username, user.RoleName)
+	// 4. Generate Access Token BARU
+	// Catatan: Jika token refresh berlaku untuk sekali pakai
+	newAccessToken, err := utils.GenerateAccessToken(user.UID, user.Username, user.RoleName)
+	if err != nil {
+		http.Error(w, "Gagal generate access token baru", http.StatusInternalServerError)
+		return
+	}
 
+	// 5. Kirim Response
 	w.Header().Set(utils.ContentHeader, utils.Mime)
+	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{
 		"access_token": newAccessToken,
 	})
