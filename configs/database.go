@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/joho/godotenv"
-	_ "github.com/lib/pq"
 )
 
 var DB *sql.DB
@@ -44,4 +43,15 @@ func ConnectDB() {
 }
 
 func CloseDB() {
+	if DB != nil {
+		log.Println("Menutup koneksi database...")
+		err := DB.Close()
+		if err != nil {
+			// Gunakan log.Fatalf jika ini kritis dan harus menghentikan aplikasi,
+			// atau log.Printf jika hanya ingin mencatat error
+			log.Printf("Gagal saat menutup koneksi database: %v", err)
+		} else {
+			log.Println("Koneksi database berhasil ditutup.")
+		}
+	}
 }

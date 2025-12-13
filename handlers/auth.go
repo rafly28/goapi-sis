@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt" // Tambahkan fmt untuk logging dan error message
 	"net/http"
+
 	// Tambahkan strings untuk membuat array ENUM
 	"go-sis-be/models"
 	"go-sis-be/utils"
@@ -46,7 +47,7 @@ func isEnumValid(value string, validOptions []string) bool {
 
 // Fungsi helper untuk mengirim respons error JSON
 func respondWithError(w http.ResponseWriter, code int, message string) {
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set(utils.ContentHeader, utils.Mime)
 	w.WriteHeader(code)
 	json.NewEncoder(w).Encode(map[string]string{"error": message})
 }
@@ -84,7 +85,7 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set(utils.ContentHeader, utils.Mime)
 	json.NewEncoder(w).Encode(TokenResponse{
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
@@ -125,7 +126,7 @@ func RefreshTokenHandler(w http.ResponseWriter, r *http.Request) {
 	// Generate Access Token BARU
 	newAccessToken, _ := utils.GenerateAccessToken(user.UID, user.Username, user.RoleName)
 
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set(utils.ContentHeader, utils.Mime)
 	json.NewEncoder(w).Encode(map[string]string{
 		"access_token": newAccessToken,
 	})
@@ -231,7 +232,7 @@ func HandleStudentRegistration(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 5. Kirim Respons Sukses
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set(utils.ContentHeader, utils.Mime)
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(resp)
 }
@@ -296,7 +297,7 @@ func HandleTeacherRegistration(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 5. Kirim Respons Sukses
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set(utils.ContentHeader, utils.Mime)
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(resp)
 }
