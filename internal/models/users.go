@@ -123,8 +123,6 @@ type Person struct {
 	Email         string `json:"email,omitempty"`
 }
 
-// RegisterBaseRequest adalah payload dasar saat registrasi
-// Digunakan untuk Admin dan Orang Tua (yang hanya butuh tabel person)
 type RegisterBaseRequest struct {
 	Username      string `json:"username"`
 	Password      string `json:"password"`
@@ -140,7 +138,6 @@ type RegisterBaseRequest struct {
 	Email         string `json:"email"`
 }
 
-// UserProfileResponse menggabungkan data login dan person
 type UserProfileResponse struct {
 	UID        string `json:"uid"`
 	Username   string `json:"username"`
@@ -191,7 +188,6 @@ type RegisterStudentRequest struct {
 	StudentDetails      // Mewarisi field NISN, FatherName, dll
 }
 
-// RegisterTeacherRequest: Data Login + Person + Teacher Details
 type RegisterTeacherRequest struct {
 	RegisterBaseRequest
 	TeacherDetails
@@ -200,7 +196,6 @@ type RegisterTeacherRequest struct {
 type StudentProfileResponse struct {
 	UID           string `json:"uid"`
 	Username      string `json:"username"`
-	RoleName      string `json:"role_name"`
 	FullName      string `json:"full_name"`
 	BirthDate     string `json:"birth_date"`
 	NIK           string `json:"nik"`
@@ -212,7 +207,6 @@ type StudentProfileResponse struct {
 	Email         string `json:"email"`
 	NISN          string `json:"nisn"`
 	NIS           string `json:"nis"`
-	ParentUID     string `json:"parent_uid"`
 	ReceivedDate  string `json:"received_date"`
 	EntryYear     int    `json:"entry_year"`
 }
@@ -220,7 +214,6 @@ type StudentProfileResponse struct {
 type TeacherProfileResponse struct {
 	UID                 string `json:"uid"`
 	Username            string `json:"username"`
-	RoleName            string `json:"role_name"`
 	FullName            string `json:"full_name"`
 	BirthDate           string `json:"birth_date"`
 	NIK                 string `json:"nik"`
@@ -246,4 +239,43 @@ type TeacherProfileResponse struct {
 	DiplomaNumber       string `json:"diploma_number"`
 	YearsOfServiceY     int    `json:"years_of_service_y"`
 	YearsOfServiceM     int    `json:"years_of_service_m"`
+}
+
+type EditStudentRequest struct {
+	// Data Person (Wajib)
+	FullName      string `json:"full_name"`
+	BirthDate     string `json:"birth_date"`
+	Religion      string `json:"religion"`
+	MaritalStatus string `json:"marital_status"`
+	Address       string `json:"address"`
+	PhoneNumber   string `json:"phone_number,omitempty"`
+	Email         string `json:"email,omitempty"`
+	NISN          string `json:"nisn"`
+	NIS           string `json:"nis"`
+	ReceivedDate  string `json:"received_date"`        // YYYY-MM-DD
+	ParentUID     string `json:"parent_uid,omitempty"` // Jika ingin mengubah Parent
+}
+
+type EditTeacherRequest struct {
+	// Data Person
+	FullName            string `json:"full_name"`
+	Religion            string `json:"religion"`
+	MaritalStatus       string `json:"marital_status"`
+	Address             string `json:"address"`
+	PhoneNumber         string `json:"phone_number,omitempty"`
+	Email               string `json:"email,omitempty"`
+	NIP                 string `json:"nip"`
+	FunctionalPosition  string `json:"functional_position"`
+	NUPTK               string `json:"nuptk,omitempty"`
+	NRG                 string `json:"nrg,omitempty"`
+	EmploymentStatus    string `json:"employment_status"`
+	RankClass           string `json:"rank_class,omitempty"`
+	HireDate            string `json:"hire_date,omitempty"`
+	SKAppointmentNumber string `json:"sk_appointment_number,omitempty"`
+	EducatorCertNumber  string `json:"educator_cert_number,omitempty"`
+	LastEducation       string `json:"last_education,omitempty"`
+	University          string `json:"university,omitempty"`
+	Major               string `json:"major,omitempty"`
+	GraduationYear      string `json:"graduation_year,omitempty"`
+	DiplomaNumber       string `json:"diploma_number,omitempty"`
 }

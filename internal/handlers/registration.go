@@ -55,12 +55,6 @@ func HandleStudentRegistration(w http.ResponseWriter, r *http.Request) {
 	// Set RoleID secara eksplisit untuk Murid (Role ID 3)
 	req.RoleID = 3
 
-	// 2. Validasi Dasar (Wajib Diisi)
-	// if req.Username == "" || req.Password == "" || req.NIK == "" || req.NISN == "" || req.FullName == "" {
-	// 	respondWithError(w, http.StatusBadRequest, "Username, Password, Nama Lengkap, NIK, dan NISN wajib diisi.")
-	// 	return
-	// }
-
 	if req.Username == "" || req.Password == "" || req.NIK == "" || req.NISN == "" || req.FullName == "" || req.ReceivedDate == "" {
 		respondWithError(w, http.StatusBadRequest, "Username, Password, Nama Lengkap, NIK, NISN, dan Tanggal Pendaftaran wajib diisi.")
 		return

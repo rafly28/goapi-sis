@@ -8,8 +8,6 @@ import (
 	"strconv"
 )
 
-// Pastikan import struct TeacherProfileResponse dan StudentProfileResponse dari user.go
-
 const (
 	ADMIN_ROLE_ID   = 1
 	TEACHER_ROLE_ID = 2
@@ -17,7 +15,6 @@ const (
 	PARENT_ROLE_ID  = 4
 )
 
-// InternalUnifiedProfile: Struct besar untuk menampung hasil scan dari query LEFT JOIN (Nullable fields)
 type InternalUnifiedProfile struct {
 	UID           string
 	RoleID        int
@@ -55,11 +52,8 @@ type InternalUnifiedProfile struct {
 	NIS  sql.NullString
 
 	// Field yang diambil dari student_details untuk JOIN/Parsing
-	ReceivedDate sql.NullString
+	ReceivedDate sql.NullTime
 }
-
-// ... (EditTeacherRequest, GetTeacherProfile, EditTeacherProfile, DeleteTeacherProfile - code lama) ...
-// Saya menghilangkan fungsi CRUD lama untuk fokus pada GetProfileAndFormat
 
 func GetProfileAndFormat(uid string) (interface{}, error) {
 	// 1. Definisikan Query LEFT JOIN Besar (Menggunakan LEFT JOIN LATERAL untuk function)
@@ -155,9 +149,12 @@ func GetProfileAndFormat(uid string) (interface{}, error) {
 	case STUDENT_ROLE_ID:
 		// Mapping/Transformasi ke StudentProfileResponse
 		entryYear := 0
+		receivedDateOutput := ""
 		if raw.ReceivedDate.Valid {
-			// Ekstrak Tahun Masuk dari received_date (YYYY-MM-DD)
-			yearStr := raw.ReceivedDate.String[:4]
+			receivedDateOutput = raw.ReceivedDate.Time.Format("2006-01-02")
+
+			// 2. Ambil Tahun Masuk untuk EntryYear
+			yearStr := raw.ReceivedDate.Time.Format("2006")
 			entryYear, _ = strconv.Atoi(yearStr)
 		}
 
@@ -170,11 +167,11 @@ func GetProfileAndFormat(uid string) (interface{}, error) {
 
 			// Student Mapping
 			NISN: raw.NISN.String, NIS: raw.NIS.String,
-			EntryYear: entryYear, // Hasil Parsing
+			ReceivedDate: receivedDateOutput,
+			EntryYear:    entryYear,
 		}, nil
 
 	default:
-		// Default role (misalnya Admin) - hanya mengembalikan data base
 		return struct {
 			UID       string `json:"uid"`
 			Username  string `json:"username"`
@@ -187,4 +184,190 @@ func GetProfileAndFormat(uid string) (interface{}, error) {
 			FullName: raw.FullName, BirthDate: raw.BirthDate, NIK: raw.NIK,
 		}, nil
 	}
+}
+
+func EditStudentProfile(uid string, req *EditStudentRequest) error {
+	tx, err := configs.DB.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	queryPerson := `
+    UPDATE person SET 
+        full_name = $2, birth_date = $3, 
+        religion = $4, marital_status = $5, address = $6, 
+        phone_number = $7, email = $8
+    WHERE uid = $1`
+
+	// Persiapan data Nullable untuk person
+	nPhone := sql.NullString{String: req.PhoneNumber, Valid: req.PhoneNumber != ""}
+	nEmail := sql.NullString{String: req.Email, Valid: req.Email != ""}
+
+	resPerson, err := tx.Exec(queryPerson,
+		uid, req.FullName, req.BirthDate,
+		req.Religion, req.MaritalStatus, req.Address, nPhone, nEmail,
+	)
+	if err != nil {
+		return fmt.Errorf("gagal update person (student): %w", err)
+	}
+
+	if rowsAffected, _ := resPerson.RowsAffected(); rowsAffected == 0 {
+		return errors.New("data murid tidak ditemukan (person)")
+	}
+
+	// 2. UPDATE student_details
+	queryStudent := `
+    UPDATE student_details SET 
+        nisn = $2, nis = $3, received_date = $4
+    WHERE uid = $1`
+
+	nReceivedDate := sql.NullString{String: req.ReceivedDate, Valid: req.ReceivedDate != ""}
+
+	_, err = tx.Exec(queryStudent,
+		uid, req.NISN, req.NIS, nReceivedDate,
+	)
+	if err != nil {
+		return fmt.Errorf("gagal update data murid: %w", err)
+	}
+
+	// 3. Commit Transaction (Memastikan kedua update berhasil)
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func DeleteStudentProfile(uid string) error {
+	tx, err := configs.DB.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	_, err = tx.Exec("DELETE FROM student_details WHERE uid = $1", uid)
+	if err != nil {
+		return fmt.Errorf("gagal delete data murid: %w", err)
+	}
+
+	_, err = tx.Exec("DELETE FROM person WHERE uid = $1", uid)
+	if err != nil {
+		return fmt.Errorf("gagal delete person (student): %w", err)
+	}
+
+	res, err := tx.Exec("DELETE FROM login_users WHERE uid = $1", uid)
+	if err != nil {
+		return fmt.Errorf("gagal delete login user (student): %w", err)
+	}
+
+	if rowsAffected, _ := res.RowsAffected(); rowsAffected == 0 {
+		return errors.New("data murid tidak ditemukan")
+	}
+
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func EditTeacherProfile(uid string, req *EditTeacherRequest) error {
+	tx, err := configs.DB.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	// 1. UPDATE person
+	// Menggunakan 10 parameter ($1-$10)
+	queryPerson := `
+    UPDATE person SET 
+        full_name = $2,
+        religion = $3, marital_status = $4, address = $5, 
+        phone_number = $6, email = $7
+    WHERE uid = $1`
+
+	// Persiapan data Nullable untuk person (PhoneNumber, Email)
+	nPhone := sql.NullString{String: req.PhoneNumber, Valid: req.PhoneNumber != ""}
+	nEmail := sql.NullString{String: req.Email, Valid: req.Email != ""}
+
+	resPerson, err := tx.Exec(queryPerson,
+		uid, req.FullName,
+		req.Religion, req.MaritalStatus, req.Address, nPhone, nEmail,
+	)
+	if err != nil {
+		return fmt.Errorf("gagal update person (teacher): %w", err)
+	}
+
+	if rowsAffected, _ := resPerson.RowsAffected(); rowsAffected == 0 {
+		return errors.New("data guru tidak ditemukan (person)")
+	}
+
+	// 2. UPDATE teacher_details
+	// Menggunakan 15 parameter ($1-$15)
+	queryTeacher := `
+    UPDATE teacher_details SET 
+        nip = $2, nuptk = $3, nrg = $4, functional_position = $5, 
+        employment_status = $6, rank_class = $7, hire_date = $8,
+        sk_appointment_number = $9, educator_cert_number = $10, 
+        last_education = $11, university = $12, major = $13, 
+        graduation_year = $14, diploma_number = $15
+    WHERE uid = $1`
+
+	// Persiapan data Nullable untuk teacher_details (NUPTK, NRG, RankClass, SKAppointmentNumber, EducatorCertNumber, DiplomaNumber)
+	nNuptk := sql.NullString{String: req.NUPTK, Valid: req.NUPTK != ""}
+	nNrg := sql.NullString{String: req.NRG, Valid: req.NRG != ""}
+	nRank := sql.NullString{String: req.RankClass, Valid: req.RankClass != ""}
+	nSK := sql.NullString{String: req.SKAppointmentNumber, Valid: req.SKAppointmentNumber != ""}
+	nCert := sql.NullString{String: req.EducatorCertNumber, Valid: req.EducatorCertNumber != ""}
+	nDiploma := sql.NullString{String: req.DiplomaNumber, Valid: req.DiplomaNumber != ""}
+
+	_, err = tx.Exec(queryTeacher,
+		uid, req.NIP, nNuptk, nNrg, req.FunctionalPosition, req.EmploymentStatus,
+		nRank, req.HireDate, nSK, nCert,
+		req.LastEducation, req.University, req.Major, req.GraduationYear, nDiploma,
+	)
+	if err != nil {
+		return fmt.Errorf("gagal update data guru: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func DeleteTeacherProfile(uid string) error {
+	tx, err := configs.DB.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	_, err = tx.Exec("DELETE FROM teacher_details WHERE uid = $1", uid)
+	if err != nil {
+		return fmt.Errorf("gagal delete data guru: %w", err)
+	}
+
+	_, err = tx.Exec("DELETE FROM person WHERE uid = $1", uid)
+	if err != nil {
+		return fmt.Errorf("gagal delete person (teacher): %w", err)
+	}
+
+	res, err := tx.Exec("DELETE FROM login_users WHERE uid = $1", uid)
+	if err != nil {
+		return fmt.Errorf("gagal delete login user (teacher): %w", err)
+	}
+
+	if rowsAffected, _ := res.RowsAffected(); rowsAffected == 0 {
+		return errors.New("data guru tidak ditemukan")
+	}
+
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+
+	return nil
 }

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"go-sis-be/internal/models"
 	"go-sis-be/internal/utils"
-	"go-sis-be/middleware"
 	"log"
 	"net/http"
 	"strconv"
@@ -41,25 +40,25 @@ func CreateUserHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(userResponse)
 }
 
-func GetUserHandler(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	uid := vars["uid"]
+// func GetUserHandler(w http.ResponseWriter, r *http.Request) {
+// 	vars := mux.Vars(r)
+// 	uid := vars["uid"]
 
-	userInfo := r.Context().Value(middleware.UserInfoKey).(*utils.JWTClaims)
-	log.Printf("Request by: %s", userInfo.Username)
+// 	userInfo := r.Context().Value(middleware.UserInfoKey).(*utils.JWTClaims)
+// 	log.Printf("Request by: %s", userInfo.Username)
 
-	user, err := models.GetUserByID(uid)
-	if err != nil {
-		http.Error(w, "Gagal mengambil data user", http.StatusInternalServerError)
-		return
-	}
-	if user == nil {
-		http.Error(w, "User tidak ditemukan", http.StatusNotFound)
-		return
-	}
-	w.Header().Set(utils.ContentHeader, utils.Mime)
-	json.NewEncoder(w).Encode(user)
-}
+// 	user, err := models.GetUserByID(uid)
+// 	if err != nil {
+// 		http.Error(w, "Gagal mengambil data user", http.StatusInternalServerError)
+// 		return
+// 	}
+// 	if user == nil {
+// 		http.Error(w, "User tidak ditemukan", http.StatusNotFound)
+// 		return
+// 	}
+// 	w.Header().Set(utils.ContentHeader, utils.Mime)
+// 	json.NewEncoder(w).Encode(user)
+// }
 
 func GetAllUsersHandler(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()

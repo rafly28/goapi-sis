@@ -116,8 +116,6 @@ func RefreshTokenHandler(w http.ResponseWriter, r *http.Request) {
 // 3. LOGOUT HANDLER
 // ==========================================
 func LogoutHandler(w http.ResponseWriter, r *http.Request) {
-	// IDEALNYA: UID diambil dari Middleware Access Token
-	// Untuk sementara kita ambil dari body request logout
 	type LogoutRequest struct {
 		UID string `json:"uid"`
 	}

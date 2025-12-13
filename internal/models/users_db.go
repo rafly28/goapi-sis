@@ -4,6 +4,7 @@ package models
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"time"
 
 	"go-sis-be/internal/configs"
@@ -62,6 +63,7 @@ func LogoutUser(uid string) error {
 }
 
 // --- BAGIAN CRUD USER ---
+
 func CreateUser(req *CreateUserRequest) (*UserResponse, error) {
 	hashedPassword, err := utils.HashPassword(req.Password)
 	if err != nil {
@@ -181,4 +183,18 @@ func DeleteUser(uid string) error {
 		return sql.ErrNoRows
 	}
 	return nil
+}
+
+func GetRoleIDByUID(uid string) (int, error) {
+	var roleID int
+	query := `SELECT role_id FROM login_users WHERE uid = $1`
+
+	err := configs.DB.QueryRow(query, uid).Scan(&roleID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return 0, errors.New("UID tidak ditemukan")
+		}
+		return 0, fmt.Errorf("gagal mendapatkan role ID: %w", err)
+	}
+	return roleID, nil
 }
