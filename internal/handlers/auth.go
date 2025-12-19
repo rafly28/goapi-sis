@@ -9,6 +9,7 @@ import (
 	// Tambahkan strings untuk membuat array ENUM
 	"go-sis-be/internal/models"
 	"go-sis-be/internal/utils"
+	"go-sis-be/middleware"
 )
 
 // ==========================================
@@ -76,45 +77,48 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
 // 2. REFRESH TOKEN HANDLER
 // ==========================================
 func RefreshTokenHandler(w http.ResponseWriter, r *http.Request) {
-	var req RefreshRequest // Pastikan RefreshRequest sudah didefinisikan
+	var req RefreshRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request payload", http.StatusBadRequest)
 		return
 	}
 
 	// 1. Validasi Refresh Token (Signature check & Expiration)
-	claims, err := utils.ValidateToken(req.RefreshToken)
+	claims, err := utils.ValidateToken(req.RefreshToken) // Mengambil claims dari token
 	if err != nil {
-		// Status 401: Unauthorized (token expired atau signature rusak)
 		http.Error(w, "Token tidak valid atau expired", http.StatusUnauthorized)
 		return
 	}
 
-	// 2. Validasi ke Database (Apakah token ini masih aktif/belum logout?)
-	// Asumsi GetRefreshToken mengembalikan string token
-	storedToken, err := models.GetRefreshToken(claims.Subject) // Subject berisi UID
-
-	// PERBAIKAN: Menggunakan kondisi OR yang lebih jelas
-	if err != nil || storedToken != req.RefreshToken {
-		http.Error(w, "Token sudah tidak berlaku (Logged out)", http.StatusUnauthorized)
+	if claims.Subject == "" {
+		http.Error(w, "Invalid token claims", http.StatusUnauthorized)
 		return
 	}
 
-	// 3. Ambil data user terbaru (untuk role/username jaga-jaga kalau berubah)
-	user, err := models.GetUserByID(claims.Subject)
+	// 2. Validasi ke Database (Revocation Check)
+	storedToken, err := models.GetRefreshToken(claims.Subject) // Subject berisi UID
 
 	if err != nil {
-		if err.Error() == "user not found" {
-			http.Error(w, "User tidak ditemukan", http.StatusUnauthorized)
-			return
-		}
-		// Error DB lainnya
-		http.Error(w, "Gagal mengambil data user", http.StatusInternalServerError)
+		// Error DB internal
+		http.Error(w, "Gagal memverifikasi token", http.StatusInternalServerError)
+		return
+	}
+
+	if storedToken != req.RefreshToken || storedToken == "" {
+		// Token mismatch (sudah di-refresh atau di-revoke) atau token tidak ditemukan di DB
+		http.Error(w, "Token sudah tidak berlaku (Revoked or Logged out)", http.StatusUnauthorized)
+		return
+	}
+
+	// 3. Ambil data user terbaru (Menggunakan GetUserByID yang sudah dikoreksi)
+	user, err := models.GetUserByID(claims.Subject)
+	if err != nil {
+		// User tidak ditemukan (kemungkinan user sudah dihapus)
+		http.Error(w, "User tidak ditemukan", http.StatusUnauthorized)
 		return
 	}
 
 	// 4. Generate Access Token BARU
-	// Catatan: Jika token refresh berlaku untuk sekali pakai
 	newAccessToken, err := utils.GenerateAccessToken(user.UID, user.Username, user.RoleName)
 	if err != nil {
 		http.Error(w, "Gagal generate access token baru", http.StatusInternalServerError)
@@ -133,25 +137,23 @@ func RefreshTokenHandler(w http.ResponseWriter, r *http.Request) {
 // 3. LOGOUT HANDLER
 // ==========================================
 func LogoutHandler(w http.ResponseWriter, r *http.Request) {
-	type LogoutRequest struct {
-		UID string `json:"uid"`
-	}
-	var req LogoutRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request payload", http.StatusBadRequest)
+	claimsContext := r.Context().Value(middleware.UserInfoKey)
+	claims, ok := claimsContext.(*utils.JWTClaims)
+
+	// PERBAIKAN DI SINI: Ganti claims.Subject menjadi claims.UID
+	if !ok || claims == nil || claims.UID == "" {
+		http.Error(w, "Unauthorized: Claims not found in context or UID missing", http.StatusUnauthorized)
 		return
 	}
 
-	if req.UID == "" {
-		http.Error(w, "UID diperlukan", http.StatusBadRequest)
-		return
-	}
+	// PERBAIKAN DI SINI: Ambil UID dari claims.UID
+	uid := claims.UID
 
-	if err := models.LogoutUser(req.UID); err != nil {
-		http.Error(w, "Gagal logout", http.StatusInternalServerError)
-		return
+	err := models.DeleteRefreshToken(uid)
+	if err != nil {
+		log.Printf("Error deleting refresh token for UID %s: %v", uid, err)
 	}
-
+	w.Header().Set(utils.ContentHeader, utils.Mime)
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("Berhasil logout"))
+	json.NewEncoder(w).Encode(map[string]string{"message": "Logout berhasil"})
 }

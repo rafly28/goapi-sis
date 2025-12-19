@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -43,24 +44,69 @@ func UpdateRefreshToken(uid string, token string) error {
 }
 
 func GetRefreshToken(uid string) (string, error) {
-	var token sql.NullString
-	query := "SELECT refresh_token FROM login_users WHERE uid = $1"
+	var storedToken string
+	// Asumsi tabel: refresh_tokens (uid, token_string, expires_at)
+	query := "SELECT token_string FROM refresh_tokens WHERE uid = $1"
 
-	err := configs.DB.QueryRow(query, uid).Scan(&token)
+	err := configs.DB.QueryRow(query, uid).Scan(&storedToken)
+	if err == sql.ErrNoRows {
+		// Jika token tidak ditemukan (sudah logout atau tidak pernah login), kembalikan string kosong
+		return "", nil
+	}
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("gagal mengambil refresh token: %w", err)
+	}
+	return storedToken, nil
+}
+
+// DeleteRefreshToken menghapus refresh token yang tersimpan, berfungsi sebagai mekanisme logout/revocation.
+func DeleteRefreshToken(uid string) error {
+	// PASTIKAN:
+	// 1. Nama tabel ('refresh_tokens') sudah benar.
+	// 2. Nama kolom UID ('uid' atau 'user_id' dll) sudah benar.
+	query :=
+		`UPDATE login_users 
+        SET refresh_token = NULL 
+        WHERE uid = $1`
+
+	result, err := configs.DB.Exec(query, uid)
+	if err != nil {
+		// Log error di sini
+		return fmt.Errorf("gagal menghapus refresh token: %w", err)
 	}
 
-	if !token.Valid {
-		return "", errors.New("token kosong")
+	// (Opsional) Cek apakah baris benar-benar terpengaruh
+	rowsAffected, _ := result.RowsAffected()
+	if rowsAffected == 0 {
+		// Log ini jika perlu, tapi ini bukan error
+		log.Printf("Warning: No refresh token found for UID %s during delete.", uid)
 	}
-	return token.String, nil
+
+	return nil
 }
 
 func LogoutUser(uid string) error {
 	query := "UPDATE login_users SET refresh_token = NULL WHERE uid = $1"
 	_, err := configs.DB.Exec(query, uid)
 	return err
+}
+
+func IsTokenBlacklisted(token string) bool {
+	var exists bool
+	// Query untuk cek apakah token ada DAN belum expired di tabel revoked_tokens
+	query := `
+        SELECT EXISTS (
+            SELECT 1 FROM revoked_tokens 
+            WHERE token_string = $1 AND expires_at > NOW()
+        )`
+
+	err := configs.DB.QueryRow(query, token).Scan(&exists)
+	if err != nil {
+		// Jika ada error DB, anggap token belum di-blacklist untuk menghindari DoS
+		log.Printf("ERROR DB checking blacklist: %v", err)
+		return false
+	}
+	return exists
 }
 
 // --- BAGIAN CRUD USER ---

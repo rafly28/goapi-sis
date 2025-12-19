@@ -98,6 +98,10 @@ type LoginCredentials struct {
 	Password string `json:"password"`
 }
 
+type RefreshRequest struct {
+	RefreshToken string `json:"refresh_token"`
+}
+
 type PaginationMeta struct {
 	CurrentPage int `json:"current_page"`
 	TotalPages  int `json:"total_pages"`

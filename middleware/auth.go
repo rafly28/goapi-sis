@@ -2,7 +2,6 @@ package middleware
 
 import (
 	"context"
-	"log"
 	"net/http"
 	"strings"
 
@@ -37,13 +36,6 @@ func AuthMiddleware(next http.Handler) http.Handler {
 			http.Error(w, "Token tidak valid atau expired", http.StatusUnauthorized)
 			return
 		}
-
-		log.Printf("User Access: %s (Role: %s) -> %s %s",
-			claims.Username,
-			claims.Role,
-			r.Method,
-			r.URL.Path,
-		)
 
 		ctx := context.WithValue(r.Context(), UserInfoKey, claims)
 		next.ServeHTTP(w, r.WithContext(ctx))
