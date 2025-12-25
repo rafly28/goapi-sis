@@ -1,0 +1,31 @@
+services:
+  db:
+      image: docker.io/library/postgres:18-alpine
+      container_name: postgres
+      ports:
+       - "5432:5432"
+      volumes:
+       - /home/rafly/file_sampis/postgres:/var/lib/postgres/data
+      environment:
+       - POSTGRES_USER=sis
+       - POSTGRES_PASSWORD=sis123
+       - POSTGRES_DB=sis
+      networks:
+        default:
+         ipv4_address: 10.89.0.3
+  cache:
+      image: docker.io/library/redis:8.4-alpine
+      container_name: redis
+      ports:
+       - "6379:6379"
+      volumes:
+       - /home/rafly/file_sampis/redis:/data
+      command:
+        redis-server --save 20 1 --loglevel warning --requirepass sis123
+      networks:
+        default:
+         ipv4_address: 10.89.0.4
+networks:
+    default:
+        name: sis-fe
+        external: true

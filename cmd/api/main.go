@@ -18,6 +18,7 @@ import (
 func main() {
 	configs.ConnectDB()
 	configs.SeedDatabase()
+	configs.InitRedis()
 	r := routes.InitRouter()
 
 	host := "localhost"

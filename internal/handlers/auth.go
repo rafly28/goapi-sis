@@ -2,8 +2,10 @@ package handlers
 
 import (
 	"encoding/json" // Tambahkan fmt untuk logging dan error message
+	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	// Tambahkan strings untuk membuat array ENUM
@@ -40,21 +42,18 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Cek User
-	// *Asumsi* models.GetUserForLogin mengambil pass hash dan role
 	user, role, err := models.GetUserForLogin(req.Username)
 	if err != nil {
 		http.Error(w, "Server error", http.StatusInternalServerError)
 		return
 	}
 
-	// Periksa apakah user ditemukan dan password match
 	hashStart := time.Now()
 	if user == nil || !utils.CheckPasswordHash(req.Pass, user.Pass) {
 		http.Error(w, "Username atau password salah", http.StatusUnauthorized)
 		return
 	}
-	log.Printf("Hashing Time: %s", time.Since(hashStart))
+	log.Printf("Checking Credential: %s", time.Since(hashStart))
 
 	// Generate Tokens
 	accessToken, _ := utils.GenerateAccessToken(user.UID, user.Username, role)
@@ -65,11 +64,20 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Gagal menyimpan session", http.StatusInternalServerError)
 		return
 	}
+	http.SetCookie(w, &http.Cookie{
+		Name:     "refresh_token",
+		Value:    refreshToken,
+		Expires:  time.Now().Add(7 * 24 * time.Hour),
+		HttpOnly: true,
+		Secure:   false,
+		Path:     "/",
+		SameSite: http.SameSiteLaxMode,
+	})
 
 	w.Header().Set(utils.ContentHeader, utils.Mime)
-	json.NewEncoder(w).Encode(TokenResponse{
-		AccessToken:  accessToken,
-		RefreshToken: refreshToken,
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"message":      "Login Success!",
+		"access_token": accessToken,
 	})
 }
 
@@ -77,58 +85,32 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
 // 2. REFRESH TOKEN HANDLER
 // ==========================================
 func RefreshTokenHandler(w http.ResponseWriter, r *http.Request) {
-	var req RefreshRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request payload", http.StatusBadRequest)
-		return
-	}
-
-	// 1. Validasi Refresh Token (Signature check & Expiration)
-	claims, err := utils.ValidateToken(req.RefreshToken) // Mengambil claims dari token
+	cookie, err := r.Cookie("refresh_token")
 	if err != nil {
-		http.Error(w, "Token tidak valid atau expired", http.StatusUnauthorized)
+		fmt.Println("KOK KOSONG? Errornya:", err)
+		http.Error(w, "Cookie gak ada Aa", http.StatusUnauthorized)
 		return
 	}
+	fmt.Println("Kuncinya dapet nih:", cookie.Value)
+	refreshTokenString := cookie.Value
 
-	if claims.Subject == "" {
-		http.Error(w, "Invalid token claims", http.StatusUnauthorized)
-		return
-	}
-
-	// 2. Validasi ke Database (Revocation Check)
-	storedToken, err := models.GetRefreshToken(claims.Subject) // Subject berisi UID
-
+	claims, err := utils.ValidateRefreshToken(refreshTokenString)
 	if err != nil {
-		// Error DB internal
-		http.Error(w, "Gagal memverifikasi token", http.StatusInternalServerError)
+		http.Error(w, "Token tidak valid: "+err.Error(), http.StatusUnauthorized)
 		return
 	}
 
-	if storedToken != req.RefreshToken || storedToken == "" {
-		// Token mismatch (sudah di-refresh atau di-revoke) atau token tidak ditemukan di DB
-		http.Error(w, "Token sudah tidak berlaku (Revoked or Logged out)", http.StatusUnauthorized)
+	userSess, err := models.GetUserSessionByUID(claims.UID)
+	if err != nil || userSess.RefreshToken != refreshTokenString {
+		http.Error(w, "Sesi kadaluarsa atau sudah logout", http.StatusUnauthorized)
 		return
 	}
 
-	// 3. Ambil data user terbaru (Menggunakan GetUserByID yang sudah dikoreksi)
-	user, err := models.GetUserByID(claims.Subject)
-	if err != nil {
-		// User tidak ditemukan (kemungkinan user sudah dihapus)
-		http.Error(w, "User tidak ditemukan", http.StatusUnauthorized)
-		return
-	}
+	newAccessToken, _ := utils.GenerateAccessToken(userSess.UID, userSess.Username, userSess.Role)
 
-	// 4. Generate Access Token BARU
-	newAccessToken, err := utils.GenerateAccessToken(user.UID, user.Username, user.RoleName)
-	if err != nil {
-		http.Error(w, "Gagal generate access token baru", http.StatusInternalServerError)
-		return
-	}
-
-	// 5. Kirim Response
 	w.Header().Set(utils.ContentHeader, utils.Mime)
-	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{
+		"message":      "Refresh Success!",
 		"access_token": newAccessToken,
 	})
 }
@@ -140,20 +122,37 @@ func LogoutHandler(w http.ResponseWriter, r *http.Request) {
 	claimsContext := r.Context().Value(middleware.UserInfoKey)
 	claims, ok := claimsContext.(*utils.JWTClaims)
 
-	// PERBAIKAN DI SINI: Ganti claims.Subject menjadi claims.UID
 	if !ok || claims == nil || claims.UID == "" {
-		http.Error(w, "Unauthorized: Claims not found in context or UID missing", http.StatusUnauthorized)
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
 
-	// PERBAIKAN DI SINI: Ambil UID dari claims.UID
 	uid := claims.UID
 
 	err := models.DeleteRefreshToken(uid)
 	if err != nil {
-		log.Printf("Error deleting refresh token for UID %s: %v", uid, err)
+		log.Printf("Error deleting refresh token: %v", err)
 	}
+
+	authHeader := r.Header.Get("Authorization")
+	tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+
+	errBlacklist := models.BlacklistToken(tokenString, 15*time.Minute)
+	if errBlacklist != nil {
+		log.Printf("ERROR REDIS BLACKLIST: %v", errBlacklist)
+	}
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     "refresh_token",
+		Value:    "",
+		Path:     "/",
+		Expires:  time.Unix(0, 0),
+		MaxAge:   -1,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+	})
+
 	w.Header().Set(utils.ContentHeader, utils.Mime)
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{"message": "Logout berhasil"})
+	json.NewEncoder(w).Encode(map[string]string{"message": "Logout Success!"})
 }

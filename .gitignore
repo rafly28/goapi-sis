@@ -2,3 +2,4 @@
 api_body.json
 go.sum
 *_test.go
+*.sql

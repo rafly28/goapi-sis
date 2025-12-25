@@ -38,9 +38,13 @@ func GetUserForLogin(username string) (*User, string, error) {
 }
 
 func UpdateRefreshToken(uid string, token string) error {
-	query := "UPDATE login_users SET refresh_token = $1, updated_at = NOW() WHERE uid = $2"
+	query := "UPDATE login_users SET refresh_token = $1, updated_at = NOW() WHERE uid = $2::uuid"
 	_, err := configs.DB.Exec(query, token, uid)
-	return err
+	if err != nil {
+		log.Printf("Error UpdateRefreshToken: %v", err)
+		return err
+	}
+	return nil
 }
 
 func GetRefreshToken(uid string) (string, error) {
@@ -85,28 +89,26 @@ func DeleteRefreshToken(uid string) error {
 	return nil
 }
 
-func LogoutUser(uid string) error {
-	query := "UPDATE login_users SET refresh_token = NULL WHERE uid = $1"
-	_, err := configs.DB.Exec(query, uid)
+func BlacklistToken(token string, expiry time.Duration) error {
+	// Simpan ke Redis dengan TTL 15 menit
+	// Format Key: "blacklist:<token>"
+	err := configs.RedisClient.Set(configs.Ctx, "blacklist:"+token, "true", expiry).Err()
 	return err
 }
 
 func IsTokenBlacklisted(token string) bool {
-	var exists bool
-	// Query untuk cek apakah token ada DAN belum expired di tabel revoked_tokens
-	query := `
-        SELECT EXISTS (
-            SELECT 1 FROM revoked_tokens 
-            WHERE token_string = $1 AND expires_at > NOW()
-        )`
-
-	err := configs.DB.QueryRow(query, token).Scan(&exists)
+	val, err := configs.RedisClient.Exists(configs.Ctx, "blacklist:"+token).Result()
 	if err != nil {
-		// Jika ada error DB, anggap token belum di-blacklist untuk menghindari DoS
-		log.Printf("ERROR DB checking blacklist: %v", err)
+		log.Printf("Redis error checking blacklist: %v", err)
 		return false
 	}
-	return exists
+	return val > 0
+}
+
+func LogoutUser(uid string) error {
+	query := "UPDATE login_users SET refresh_token = NULL WHERE uid = $1"
+	_, err := configs.DB.Exec(query, uid)
+	return err
 }
 
 // --- BAGIAN CRUD USER ---
@@ -286,4 +288,37 @@ func GetAllUsers(page int, limit int, search string, roleID int) ([]UserResponse
 	}
 
 	return users, totalCount, nil
+}
+
+func GetUserSessionByUID(uid string) (*UserSession, error) {
+	var sess UserSession
+	var rt sql.NullString
+
+	// Kita JOIN dengan tabel roles untuk mendapatkan nama role-nya
+	query := `
+		SELECT u.uid, u.username, r.name as role_name, u.refresh_token 
+		FROM login_users u
+		JOIN roles r ON u.role_id = r.id
+		WHERE u.uid = $1::uuid
+	`
+
+	err := configs.DB.QueryRow(query, uid).Scan(
+		&sess.UID,
+		&sess.Username,
+		&sess.Role,
+		&rt,
+	)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("user tidak ditemukan")
+		}
+		return nil, err
+	}
+
+	if rt.Valid {
+		sess.RefreshToken = rt.String
+	}
+
+	return &sess, nil
 }

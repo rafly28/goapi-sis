@@ -285,3 +285,10 @@ type EditTeacherRequest struct {
 	GraduationYear      string `json:"graduation_year,omitempty"`
 	DiplomaNumber       string `json:"diploma_number,omitempty"`
 }
+
+type UserSession struct {
+	UID          string
+	Username     string
+	Role         string
+	RefreshToken string
+}
