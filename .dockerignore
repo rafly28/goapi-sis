@@ -1,0 +1,26 @@
+# Git
+.git
+.gitignore
+
+# Docker
+Dockerfile
+.dockerignore
+
+# Go build & testing
+vendor/
+bin/
+*.test
+*.out
+cover.out
+
+# Local development
+.env
+.env.local
+tmp/
+dist/
+
+# Documentation & IDE
+README.md
+docs/
+.vscode/
+.idea/

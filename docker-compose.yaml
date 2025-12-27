@@ -25,6 +25,20 @@ services:
       networks:
         default:
          ipv4_address: 10.89.0.4
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: goapi-sis
+    ports:
+      - "8080:8080"
+    depends_on:
+      - db
+      - cache
+    networks:
+      default:
+        ipv4_address: 10.89.0.2
+
 networks:
     default:
         name: sis-fe
