@@ -48,5 +48,11 @@ func InitRouter() *mux.Router {
 	protectedRouter.HandleFunc("/register/admin", handlers.HandleAdminRegistration).Methods("POST")
 	protectedRouter.HandleFunc("/register/parent", handlers.HandleParentRegistration).Methods("POST")
 
+	// 4. Kelas Endpoint
+	protectedRouter.HandleFunc("/classes", handlers.CreateClassHandler).Methods("POST")
+    protectedRouter.HandleFunc("/classes", handlers.GetAllClassesHandler).Methods("GET")
+	protectedRouter.HandleFunc("/classes/{id}/students", handlers.AddStudentsToClassHandler).Methods("POST")
+	protectedRouter.HandleFunc("/classes/{id}/students", handlers.GetClassStudentsHandler).Methods("GET")
+	
 	return r
 }
